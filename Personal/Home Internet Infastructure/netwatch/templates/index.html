@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetWatch</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --bg2: #141417;
+    --bg3: #1a1a1f;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8e8ec;
+    --muted: #6b6b7a;
+    --accent: #3b82f6;
+    --accent2: #10b981;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+    --font: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.5; }
+  
+  #app { display: grid; grid-template-rows: 48px 1fr; height: 100vh; overflow: hidden; }
+  
+  /* HEADER */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; border-bottom: 1px solid var(--border);
+    background: var(--bg); position: relative; z-index: 10;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .logo-text { font-size: 14px; font-weight: 600; letter-spacing: 0.1em; color: var(--text); }
+  .header-stats { display: flex; gap: 24px; align-items: center; }
+  .hstat { display: flex; gap: 6px; align-items: baseline; }
+  .hstat-val { font-size: 16px; font-weight: 600; color: var(--text); }
+  .hstat-label { font-size: 11px; color: var(--muted); }
+  .wan-speed { display: flex; gap: 12px; align-items: center; }
+  .speed-pill { padding: 2px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+  .speed-down { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+  .speed-up { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+  .header-right { display: flex; gap: 12px; align-items: center; }
+  .btn { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: var(--font); font-size: 12px; cursor: pointer; transition: all .15s; }
+  .btn:hover { background: var(--bg2); border-color: rgba(255,255,255,0.2); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-ok { background: var(--accent2); }
+  .dot-err { background: var(--danger); }
+  .dot-warn { background: var(--warn); }
+  #last-update { font-size: 11px; color: var(--muted); }
+
+  /* MAIN LAYOUT */
+  main { display: grid; grid-template-columns: 280px 1fr; overflow: hidden; }
+
+  /* SIDEBAR */
+  aside {
+    border-right: 1px solid var(--border); overflow-y: auto; padding: 12px 0;
+    display: flex; flex-direction: column; gap: 0;
+  }
+  aside::-webkit-scrollbar { width: 4px; }
+  aside::-webkit-scrollbar-track { background: transparent; }
+  aside::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .sidebar-section-title {
+    padding: 8px 16px 4px; font-size: 10px; letter-spacing: 0.12em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .device-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    cursor: pointer; transition: background .1s; border-left: 2px solid transparent;
+  }
+  .device-item:hover { background: var(--bg3); }
+  .device-item.active { background: var(--bg3); border-left-color: var(--accent); }
+  .device-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .icon-mikrotik { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .icon-wifi { background: rgba(16,185,129,0.15); color: #34d399; }
+  .icon-offline { background: rgba(107,107,122,0.15); color: var(--muted); }
+  .device-info { flex: 1; min-width: 0; }
+  .device-name { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .device-ip { font-size: 11px; color: var(--muted); }
+  .device-bw { text-align: right; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .online-badge { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  /* CONTENT AREA */
+  .content { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .content::-webkit-scrollbar { width: 4px; }
+  .content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text); letter-spacing: 0.05em; text-transform: uppercase; }
+  .card-body { padding: 16px; }
+
+  /* OVERVIEW GRID */
+  .overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 600; color: var(--text); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat-value.green { color: var(--accent2); }
+  .stat-value.blue { color: #60a5fa; }
+
+  /* CHART */
+  .chart-container { position: relative; width: 100%; height: 180px; }
+  .period-tabs { display: flex; gap: 4px; }
+  .ptab {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-family: var(--font);
+    font-size: 11px; cursor: pointer; transition: all .15s;
+  }
+  .ptab.active, .ptab:hover { background: var(--bg3); border-color: var(--border2); color: var(--text); }
+
+  /* TOPOLOGY */
+  #topology-svg { width: 100%; height: 280px; }
+  .topo-node { cursor: pointer; }
+  .topo-label { font-family: var(--font); font-size: 10px; fill: #e8e8ec; }
+  .topo-sublabel { font-family: var(--font); font-size: 9px; fill: #6b6b7a; }
+  .topo-link { stroke: #2a2a35; stroke-width: 1.5; }
+  .topo-link.active-link { stroke: #3b82f6; stroke-width: 2; stroke-dasharray: 4 4; animation: dash 1s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -8; } }
+
+  /* EVENTS */
+  .event-list { display: flex; flex-direction: column; gap: 1px; }
+  .event-item { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .event-item:last-child { border-bottom: none; }
+  .event-ts { font-size: 10px; color: var(--muted); white-space: nowrap; min-width: 60px; }
+  .event-type { font-size: 10px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+  .et-new_device { background: rgba(16,185,129,0.15); color: #34d399; }
+  .et-ip_change { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .et-offline { background: rgba(107,107,122,0.15); color: var(--muted); }
+  .event-desc { font-size: 11px; color: var(--muted); }
+
+  /* DEVICE DETAIL PANEL */
+  #detail-panel { display: none; }
+  #detail-panel.visible { display: flex; flex-direction: column; gap: 16px; }
+  .detail-header { display: flex; gap: 14px; align-items: center; }
+  .detail-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .detail-name { font-size: 16px; font-weight: 600; }
+  .detail-meta { font-size: 11px; color: var(--muted); }
+  .detail-table { width: 100%; border-collapse: collapse; }
+  .detail-table td { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .detail-table td:first-child { color: var(--muted); width: 120px; }
+  .detail-table tr:last-child td { border-bottom: none; }
+  .rename-row { display: flex; gap: 8px; margin-top: 8px; }
+  .rename-input {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px;
+    color: var(--text); font-family: var(--font); font-size: 12px; padding: 5px 10px; outline: none;
+  }
+  .rename-input:focus { border-color: var(--accent); }
+  .btn-primary { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); color: #60a5fa; }
+  .btn-primary:hover { background: rgba(59,130,246,0.3); }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 24px; width: 440px; max-width: 95vw; }
+  .modal-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .form-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  .form-label { font-size: 11px; color: var(--muted); }
+  .form-input {
+    background: var(--bg3); border: 1px solid var(--border2); border-radius: 5px;
+    color: var(--text); font-family: var(--font); font-size: 12px; padding: 7px 10px; outline: none; width: 100%;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .no-data { color: var(--muted); font-size: 12px; padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <div class="logo-dot" id="conn-dot"></div>
+      <span class="logo-text">NETWATCH</span>
+    </div>
+    <div class="header-stats">
+      <div class="hstat"><span class="hstat-val" id="h-online">—</span><span class="hstat-label">online</span></div>
+      <div class="hstat"><span class="hstat-val" id="h-total">—</span><span class="hstat-label">devices</span></div>
+      <div class="wan-speed">
+        <span class="speed-pill speed-down">↓ <span id="h-rx">—</span></span>
+        <span class="speed-pill speed-up">↑ <span id="h-tx">—</span></span>
+      </div>
+    </div>
+    <div class="header-right">
+      <span id="last-update">—</span>
+      <button class="btn" onclick="openSettings()">⚙ Settings</button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="device-sidebar">
+      <div class="sidebar-section-title">Mikrotik LAN</div>
+      <div id="sidebar-mikrotik"></div>
+      <div class="sidebar-section-title" style="margin-top:8px">WiFi / ISP</div>
+      <div id="sidebar-wifi"></div>
+    </aside>
+
+    <div class="content" id="main-content">
+      <!-- OVERVIEW -->
+      <div id="overview-section">
+        <div class="overview-grid">
+          <div class="stat-card">
+            <div class="stat-label">WAN Down</div>
+            <div class="stat-value blue" id="s-rx">—</div>
+            <div class="stat-sub">current rate</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">WAN Up</div>
+            <div class="stat-value green" id="s-tx">—</div>
+            <div class="stat-sub">current rate</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Devices Online</div>
+            <div class="stat-value" id="s-online">—</div>
+            <div class="stat-sub" id="s-total-sub">of — known</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Mikrotik LAN</div>
+            <div class="stat-value" id="s-mkt">—</div>
+            <div class="stat-sub">devices</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOPOLOGY -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Network Topology</span>
+          <span style="font-size:11px;color:var(--muted)">live</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <svg id="topology-svg" viewBox="0 0 680 280"></svg>
+        </div>
+      </div>
+
+      <!-- WAN CHART -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">WAN Throughput</span>
+          <div class="period-tabs">
+            <button class="ptab active" data-p="1h">1h</button>
+            <button class="ptab" data-p="6h">6h</button>
+            <button class="ptab" data-p="24h">24h</button>
+            <button class="ptab" data-p="7d">7d</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container">
+            <canvas id="wan-chart" role="img" aria-label="WAN throughput over time"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEVICE DETAIL (shown when device selected) -->
+      <div class="card" id="detail-card" style="display:none">
+        <div class="card-header">
+          <span class="card-title">Device Detail</span>
+          <button class="btn" onclick="closeDetail()">✕ Close</button>
+        </div>
+        <div class="card-body">
+          <div id="detail-panel" class="visible">
+            <div class="detail-header">
+              <div class="detail-icon" id="d-icon">📡</div>
+              <div>
+                <div class="detail-name" id="d-name">—</div>
+                <div class="detail-meta" id="d-meta">—</div>
+              </div>
+            </div>
+            <table class="detail-table">
+              <tr><td>IP Address</td><td id="d-ip">—</td></tr>
+              <tr><td>MAC Address</td><td id="d-mac">—</td></tr>
+              <tr><td>Segment</td><td id="d-seg">—</td></tr>
+              <tr><td>First seen</td><td id="d-first">—</td></tr>
+              <tr><td>Last seen</td><td id="d-last">—</td></tr>
+              <tr><td>Status</td><td id="d-status">—</td></tr>
+            </table>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Rename device</div>
+              <div class="rename-row">
+                <input class="rename-input" id="rename-input" placeholder="Friendly name (e.g. Desktop, Smart TV)">
+                <button class="btn btn-primary" onclick="renameDevice()">Save</button>
+              </div>
+            </div>
+            <div class="card" style="margin-top:0">
+              <div class="card-header"><span class="card-title">Device Bandwidth</span></div>
+              <div class="card-body">
+                <div class="chart-container">
+                  <canvas id="device-chart" role="img" aria-label="Device bandwidth over time"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENTS -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Events</span>
+          <span style="font-size:11px;color:var(--muted)">last 20</span>
+        </div>
+        <div class="card-body">
+          <div class="event-list" id="event-list">
+            <div class="no-data">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-title">⚙ Configuration</div>
+    <div class="form-row"><label class="form-label">Mikrotik IP</label><input class="form-input" id="cfg-ip"></div>
+    <div class="form-row"><label class="form-label">Mikrotik User</label><input class="form-input" id="cfg-user"></div>
+    <div class="form-row"><label class="form-label">Mikrotik Password</label><input class="form-input" type="password" id="cfg-pass" placeholder="leave blank to keep current"></div>
+    <div class="form-row"><label class="form-label">Mikrotik LAN Subnet (e.g. 10.10.10.0/24)</label><input class="form-input" id="cfg-mlan"></div>
+    <div class="form-row"><label class="form-label">ISP Subnet (e.g. 192.168.1.0/24)</label><input class="form-input" id="cfg-isp"></div>
+    <div class="form-row"><label class="form-label">Poll Interval (seconds)</label><input class="form-input" id="cfg-poll" type="number" min="5"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px" id="test-result"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="testMikrotik()">Test Connection</button>
+      <button class="btn" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- STATE ----
+let state = { devices: [], wan: {}, events: [], ts: 0 };
+let selectedMac = null;
+let wanChart = null;
+let deviceChart = null;
+let currentPeriod = '1h';
+
+// ---- UTILS ----
+function fmtBytes(bps) {
+  if (bps === undefined || bps === null || isNaN(bps)) return '—';
+  if (bps === 0) return '0 B/s';
+  const units = ['B/s','KB/s','MB/s','GB/s'];
+  let i = 0, v = bps;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+function timeSince(ts) {
+  const s = Math.floor(Date.now()/1000) - ts;
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function deviceLabel(d) {
+  return d.hostname || d.ip || d.mac;
+}
+function deviceIcon(d) {
+  if (!d.is_online) return '💤';
+  if (d.segment === 'mikrotik') return '🖥';
+  return '📱';
+}
+
+// ---- FETCH ----
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) throw new Error();
+    state = await r.json();
+    render();
+    document.getElementById('conn-dot').style.background = '#10b981';
+    document.getElementById('conn-dot').style.boxShadow = '0 0 8px #10b981';
+  } catch(e) {
+    document.getElementById('conn-dot').style.background = '#ef4444';
+    document.getElementById('conn-dot').style.boxShadow = '0 0 8px #ef4444';
+  }
+}
+
+async function fetchWanChart(period) {
+  const r = await fetch('/api/wan/history?period=' + period);
+  const data = await r.json();
+  updateWanChart(data);
+}
+
+async function fetchDeviceChart(mac, period) {
+  const r = await fetch('/api/bandwidth/history?mac=' + mac + '&period=' + period);
+  const data = await r.json();
+  updateDeviceChart(data);
+}
+
+// ---- RENDER ----
+function render() {
+  const { devices, wan, events } = state;
+  const online = devices.filter(d => d.is_online).length;
+  const mkt = devices.filter(d => d.segment === 'mikrotik').length;
+
+  // Header
+  document.getElementById('h-online').textContent = online;
+  document.getElementById('h-total').textContent = devices.length;
+  document.getElementById('h-rx').textContent = fmtBytes(wan.rx_rate);
+  document.getElementById('h-tx').textContent = fmtBytes(wan.tx_rate);
+  document.getElementById('last-update').textContent = 'Updated ' + timeSince(state.ts);
+
+  // Stats
+  document.getElementById('s-rx').textContent = fmtBytes(wan.rx_rate);
+  document.getElementById('s-tx').textContent = fmtBytes(wan.tx_rate);
+  document.getElementById('s-online').textContent = online;
+  document.getElementById('s-total-sub').textContent = 'of ' + devices.length + ' known';
+  document.getElementById('s-mkt').textContent = mkt;
+
+  // Sidebar
+  renderSidebar(devices);
+
+  // Topology
+  renderTopology(devices, wan);
+
+  // Events
+  renderEvents(events);
+}
+
+function renderSidebar(devices) {
+  const mkt = devices.filter(d => d.segment === 'mikrotik');
+  const wifi = devices.filter(d => d.segment !== 'mikrotik');
+  document.getElementById('sidebar-mikrotik').innerHTML = mkt.map(d => deviceRow(d)).join('');
+  document.getElementById('sidebar-wifi').innerHTML = wifi.map(d => deviceRow(d)).join('');
+  if (wifi.length === 0) document.getElementById('sidebar-wifi').innerHTML = '<div style="padding:6px 16px;font-size:11px;color:var(--muted)">No WiFi devices detected</div>';
+}
+
+function deviceRow(d) {
+  const active = selectedMac === d.mac ? 'active' : '';
+  const iconCls = !d.is_online ? 'icon-offline' : (d.segment === 'mikrotik' ? 'icon-mikrotik' : 'icon-wifi');
+  const dotCol = d.is_online ? (d.segment === 'mikrotik' ? '#60a5fa' : '#34d399') : '#3f3f4a';
+  return `<div class="device-item ${active}" onclick="selectDevice('${d.mac}')">
+    <div class="device-icon ${iconCls}">${deviceIcon(d)}</div>
+    <div class="device-info">
+      <div class="device-name">${deviceLabel(d)}</div>
+      <div class="device-ip">${d.ip || d.mac}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+      <div class="online-badge" style="background:${dotCol}"></div>
+    </div>
+  </div>`;
+}
+
+function renderTopology(devices, wan) {
+  const svg = document.getElementById('topology-svg');
+  const W = 680, H = 280;
+  const onlineMkt = devices.filter(d => d.segment === 'mikrotik' && d.is_online);
+  const onlineWifi = devices.filter(d => d.segment !== 'mikrotik' && d.is_online);
+
+  let html = '';
+  // Internet node
+  html += node(50, 140, '🌐', 'Internet', '', '#1a1a2e', '#3b82f6');
+  html += link(82, 140, 140, 140, wan.rx_rate > 0);
+
+  // ISP Router
+  html += node(160, 140, '📡', 'ISP Router', '', '#1a1a2e', '#6b6b7a');
+  html += link(192, 140, 260, 80, false);
+  html += link(192, 140, 260, 140, false);
+  html += link(192, 140, 260, 200, onlineMkt.length > 0);
+
+  // Pi
+  html += node(280, 80, '🍓', 'Pi Zero W', 'monitor', '#1a201a', '#10b981');
+
+  // WiFi devices (compact)
+  if (onlineWifi.length > 0) {
+    html += node(280, 140, '📶', 'WiFi', onlineWifi.length + ' devices', '#1a1a2e', '#6b6b7a');
+  }
+
+  // Mikrotik
+  html += node(280, 200, '🔀', 'Mikrotik hEX', '10.10.10.0/24', '#1a1a2e', '#3b82f6');
+
+  // Mikrotik downstream devices
+  const mktSlice = onlineMkt.slice(0, 5);
+  const spacing = mktSlice.length > 1 ? Math.min(50, 200 / mktSlice.length) : 0;
+  const startY = 200 - (spacing * (mktSlice.length - 1)) / 2;
+  mktSlice.forEach((d, i) => {
+    const y = startY + i * spacing;
+    html += link(330, 200, 430, y, true);
+    html += node(450, y, '🖥', deviceLabel(d), d.ip, '#0d1a2e', '#3b82f6');
+  });
+  if (onlineMkt.length > 5) {
+    html += `<text x="450" y="${startY + 5*spacing + 14}" class="topo-sublabel" text-anchor="middle">+${onlineMkt.length-5} more</text>`;
+  }
+  if (onlineMkt.length === 0) {
+    html += `<text x="450" y="204" class="topo-sublabel" text-anchor="middle">no devices online</text>`;
+  }
+
+  svg.innerHTML = html;
+}
+
+function node(x, y, icon, label, sub, bg, stroke) {
+  return `<g class="topo-node">
+    <rect x="${x-30}" y="${y-18}" width="60" height="36" rx="7" fill="${bg}" stroke="${stroke}" stroke-width="1.2"/>
+    <text x="${x}" y="${y+4}" text-anchor="middle" font-size="14">${icon}</text>
+    <text x="${x}" y="${y+28}" class="topo-label" text-anchor="middle">${label}</text>
+    ${sub ? `<text x="${x}" y="${y+39}" class="topo-sublabel" text-anchor="middle">${sub}</text>` : ''}
+  </g>`;
+}
+
+function link(x1, y1, x2, y2, active) {
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="topo-link${active?' active-link':''}"/>`;
+}
+
+function renderEvents(events) {
+  const el = document.getElementById('event-list');
+  if (!events || events.length === 0) {
+    el.innerHTML = '<div class="no-data">No events yet</div>';
+    return;
+  }
+  el.innerHTML = events.map(e => `
+    <div class="event-item">
+      <span class="event-ts">${fmtTime(e.ts)}</span>
+      <span class="event-type et-${e.event_type}">${e.event_type.replace('_',' ')}</span>
+      <span class="event-desc">${e.description}</span>
+    </div>`).join('');
+}
+
+// ---- DEVICE DETAIL ----
+function selectDevice(mac) {
+  selectedMac = mac;
+  const d = state.devices.find(x => x.mac === mac);
+  if (!d) return;
+  document.getElementById('detail-card').style.display = 'block';
+  document.getElementById('d-icon').textContent = deviceIcon(d);
+  document.getElementById('d-name').textContent = deviceLabel(d);
+  document.getElementById('d-meta').textContent = d.segment === 'mikrotik' ? 'Mikrotik LAN device' : 'WiFi device';
+  document.getElementById('d-ip').textContent = d.ip || '—';
+  document.getElementById('d-mac').textContent = d.mac;
+  document.getElementById('d-seg').textContent = d.segment;
+  document.getElementById('d-first').textContent = fmtDate(d.first_seen);
+  document.getElementById('d-last').textContent = fmtDate(d.last_seen);
+  document.getElementById('d-status').textContent = d.is_online ? '🟢 Online' : '⚫ Offline';
+  document.getElementById('rename-input').value = d.hostname || '';
+  fetchDeviceChart(mac, currentPeriod);
+  renderSidebar(state.devices);
+  document.getElementById('detail-card').scrollIntoView({behavior:'smooth'});
+}
+
+function closeDetail() {
+  selectedMac = null;
+  document.getElementById('detail-card').style.display = 'none';
+  renderSidebar(state.devices);
+}
+
+async function renameDevice() {
+  const name = document.getElementById('rename-input').value.trim();
+  if (!selectedMac) return;
+  await fetch('/api/device/' + selectedMac + '/rename', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({hostname: name})
+  });
+  await fetchStatus();
+  selectDevice(selectedMac);
+}
+
+// ---- CHARTS ----
+function initWanChart() {
+  const ctx = document.getElementById('wan-chart').getContext('2d');
+  wanChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Download', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
+        { label: 'Upload', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#6b6b7a', font: { size: 10, family: 'SF Mono, monospace' }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#6b6b7a', font: { size: 10, family: 'SF Mono, monospace' }, callback: v => fmtBytes(v) }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
+
+function updateWanChart(data) {
+  if (!wanChart) return;
+  wanChart.data.labels = data.map(d => fmtTime(d.ts));
+  wanChart.data.datasets[0].data = data.map(d => d.rx_rate || 0);
+  wanChart.data.datasets[1].data = data.map(d => d.tx_rate || 0);
+  wanChart.update();
+}
+
+function initDeviceChart() {
+  const ctx = document.getElementById('device-chart').getContext('2d');
+  deviceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'TX', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#6b6b7a', font: { size: 10, family: 'SF Mono, monospace' }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#6b6b7a', font: { size: 10, family: 'SF Mono, monospace' }, callback: v => fmtBytes(v) }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
+
+function updateDeviceChart(data) {
+  if (!deviceChart) return;
+  deviceChart.data.labels = data.map(d => fmtTime(d.ts));
+  deviceChart.data.datasets[0].data = data.map(d => d.tx_rate || 0);
+  deviceChart.update();
+}
+
+// ---- PERIOD TABS ----
+document.querySelectorAll('.ptab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.ptab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPeriod = btn.dataset.p;
+    fetchWanChart(currentPeriod);
+    if (selectedMac) fetchDeviceChart(selectedMac, currentPeriod);
+  });
+});
+
+// ---- SETTINGS ----
+function openSettings() {
+  fetch('/api/config').then(r=>r.json()).then(cfg => {
+    document.getElementById('cfg-ip').value = cfg.mikrotik_ip || '';
+    document.getElementById('cfg-user').value = cfg.mikrotik_user || '';
+    document.getElementById('cfg-pass').value = '';
+    document.getElementById('cfg-mlan').value = cfg.mikrotik_lan || '10.10.10.0/24';
+    document.getElementById('cfg-isp').value = cfg.isp_subnet || '192.168.1.0/24';
+    document.getElementById('cfg-poll').value = cfg.poll_interval_sec || 10;
+    document.getElementById('test-result').textContent = '';
+    document.getElementById('settings-modal').classList.add('open');
+  });
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+async function saveSettings() {
+  const pass = document.getElementById('cfg-pass').value;
+  const body = {
+    mikrotik_ip: document.getElementById('cfg-ip').value,
+    mikrotik_user: document.getElementById('cfg-user').value,
+    mikrotik_lan: document.getElementById('cfg-mlan').value,
+    isp_subnet: document.getElementById('cfg-isp').value,
+    poll_interval_sec: parseInt(document.getElementById('cfg-poll').value),
+  };
+  if (pass) body.mikrotik_pass = pass;
+  await fetch('/api/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  closeSettings();
+}
+async function testMikrotik() {
+  const el = document.getElementById('test-result');
+  el.style.color = 'var(--muted)';
+  el.textContent = 'Testing...';
+  const r = await fetch('/api/mikrotik/test');
+  if (r.ok) {
+    el.style.color = '#34d399';
+    el.textContent = '✓ Connection OK';
+  } else {
+    el.style.color = '#ef4444';
+    el.textContent = '✗ Cannot reach Mikrotik REST API — check IP, credentials, and that REST API is enabled on port 80';
+  }
+}
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSettings();
+});
+
+// ---- INIT ----
+initWanChart();
+initDeviceChart();
+fetchStatus();
+fetchWanChart('1h');
+setInterval(fetchStatus, 10000);
+setInterval(() => fetchWanChart(currentPeriod), 15000);
+setInterval(() => { if (selectedMac) fetchDeviceChart(selectedMac, currentPeriod); }, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "mikrotik_ip": "192.168.1.1",
+  "mikrotik_user": "admin",
+  "mikrotik_pass": "your_password_here",
+  "mikrotik_port": 80,
+  "mikrotik_use_ssl": false,
+  "mikrotik_lan": "10.10.10.0/24",
+  "isp_subnet": "192.168.1.0/24",
+  "poll_interval_sec": 10,
+  "arp_scan_interval_sec": 60,
+  "db_retention_days": 7
+}
