@@ -1,8 +1,8 @@
 # Welcome
 
-I am Rúben Silva and this is my GitHub for my Academic and Personal Projects.
+I am Rúben Silva and this is my GitHub for my Academic and Personal Projects. 
 
-# Structure
+# Structure (See in RAW/code View)
 Main
   |---README.md
   |---Academic
